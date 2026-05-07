@@ -2421,9 +2421,11 @@ function buildScrollScript(scrollTarget, writingMode, readySeq) {
   function vh(){ return window.innerHeight; }
   function maxS(){ return Math.max(0, body.offsetHeight - vh()); }
   // 行高 (horizontal-tb では line-height が 1行高さ) を解決済み px で取得
-  function lineSize(){ var lh = parseFloat(getComputedStyle(body).lineHeight); return (lh > 0) ? lh : 0; }
+  function lineSize(){ var cs = getComputedStyle(body), s = cs.lineHeight, lh = parseFloat(s); if(!(lh > 0)) return 0; if(s.indexOf('px') < 0){ var fs = parseFloat(cs.fontSize); return (fs > 0) ? lh * fs : 0; } return lh; }
   function pageStep(vp){ var ls = lineSize(); return (ls > 0 && ls < vp) ? Math.floor(vp/ls)*ls : Math.round(vp*STEP); }
-  function snapLine(p){ var ls = lineSize(); return (ls > 0) ? Math.round(p/ls)*ls : p; }
+  var _snapOrigin = null;
+  function snapOrigin(){ if(_snapOrigin !== null) return _snapOrigin; var bcs = getComputedStyle(body), hcs = getComputedStyle(document.documentElement); var isH = /vertical|sideways/.test((bcs.writingMode||'').toLowerCase()); var bo = isH ? ((parseFloat(hcs.paddingRight)||0) + (parseFloat(bcs.marginRight)||0) + (parseFloat(bcs.paddingRight)||0)) : ((parseFloat(hcs.paddingTop)||0) + (parseFloat(bcs.marginTop)||0) + (parseFloat(bcs.paddingTop)||0)); var bL = lineSize(); if(!(bL > 0)){ _snapOrigin = bo; return bo; } var bR = body.getBoundingClientRect(); var cs = body.children; var max = Math.min(cs.length, 16); for(var i = 0; i < max; i++){ var c = cs[i]; if(!c.offsetWidth || !c.offsetHeight) continue; var ccs = getComputedStyle(c); var ls = ccs.lineHeight; var lh = parseFloat(ls); if(!(lh > 0)) continue; if(ls.indexOf('px') < 0){ var fs = parseFloat(ccs.fontSize); lh = (fs > 0) ? lh * fs : 0; } if(Math.abs(lh - bL) >= 0.5) continue; var r = c.getBoundingClientRect(); var co = isH ? (bR.right - r.right) : (r.top - bR.top); var v = bo + co; if(isFinite(v) && v >= 0){ _snapOrigin = v; return v; } break; } _snapOrigin = bo; return bo; }
+  function snapLine(p){ var ls = lineSize(); if(!(ls > 0)) return p; var o = snapOrigin(); return o + Math.floor((p - o)/ls)*ls; }
 
   function postEdge(d){ window.parent.postMessage({type:'EPUB_EDGE',direction:d},'*'); }
   function postPos(r){  window.parent.postMessage({type:'EPUB_POS', ratio:r},  '*'); }
@@ -2510,9 +2512,11 @@ ${INIT_FN}
   function vw(){ return window.innerWidth; }
   function vh(){ return window.innerHeight; }
   // 行サイズ — h軸: line-height がコラム幅 / v軸: 1行高 — どちらも body の line-height で取得
-  function lineSize(){ var lh = parseFloat(getComputedStyle(body).lineHeight); return (lh > 0) ? lh : 0; }
+  function lineSize(){ var cs = getComputedStyle(body), s = cs.lineHeight, lh = parseFloat(s); if(!(lh > 0)) return 0; if(s.indexOf('px') < 0){ var fs = parseFloat(cs.fontSize); return (fs > 0) ? lh * fs : 0; } return lh; }
   function pageStep(vp){ var ls = lineSize(); return (ls > 0 && ls < vp) ? Math.floor(vp/ls)*ls : Math.round(vp*STEP); }
-  function snapLine(p){ var ls = lineSize(); return (ls > 0) ? Math.round(p/ls)*ls : p; }
+  var _snapOrigin = null;
+  function snapOrigin(){ if(_snapOrigin !== null) return _snapOrigin; var bcs = getComputedStyle(body), hcs = getComputedStyle(document.documentElement); var isH = /vertical|sideways/.test((bcs.writingMode||'').toLowerCase()); var bo = isH ? ((parseFloat(hcs.paddingRight)||0) + (parseFloat(bcs.marginRight)||0) + (parseFloat(bcs.paddingRight)||0)) : ((parseFloat(hcs.paddingTop)||0) + (parseFloat(bcs.marginTop)||0) + (parseFloat(bcs.paddingTop)||0)); var bL = lineSize(); if(!(bL > 0)){ _snapOrigin = bo; return bo; } var bR = body.getBoundingClientRect(); var cs = body.children; var max = Math.min(cs.length, 16); for(var i = 0; i < max; i++){ var c = cs[i]; if(!c.offsetWidth || !c.offsetHeight) continue; var ccs = getComputedStyle(c); var ls = ccs.lineHeight; var lh = parseFloat(ls); if(!(lh > 0)) continue; if(ls.indexOf('px') < 0){ var fs = parseFloat(ccs.fontSize); lh = (fs > 0) ? lh * fs : 0; } if(Math.abs(lh - bL) >= 0.5) continue; var r = c.getBoundingClientRect(); var co = isH ? (bR.right - r.right) : (r.top - bR.top); var v = bo + co; if(isFinite(v) && v >= 0){ _snapOrigin = v; return v; } break; } _snapOrigin = bo; return bo; }
+  function snapLine(p){ var ls = lineSize(); if(!(ls > 0)) return p; var o = snapOrigin(); return o + Math.floor((p - o)/ls)*ls; }
 
   function detectAxis(){
     if(_axis) return _axis;
@@ -2662,9 +2666,11 @@ ${INIT_FN}
   function vw(){ return window.innerWidth; }
   function maxS(){ return Math.max(0, body.offsetWidth - vw()); }
   // 行幅 (vertical-rl では line-height がコラム幅) を解決済み px で取得
-  function lineSize(){ var lh = parseFloat(getComputedStyle(body).lineHeight); return (lh > 0) ? lh : 0; }
+  function lineSize(){ var cs = getComputedStyle(body), s = cs.lineHeight, lh = parseFloat(s); if(!(lh > 0)) return 0; if(s.indexOf('px') < 0){ var fs = parseFloat(cs.fontSize); return (fs > 0) ? lh * fs : 0; } return lh; }
   function pageStep(vp){ var ls = lineSize(); return (ls > 0 && ls < vp) ? Math.floor(vp/ls)*ls : Math.round(vp*STEP); }
-  function snapLine(p){ var ls = lineSize(); return (ls > 0) ? Math.round(p/ls)*ls : p; }
+  var _snapOrigin = null;
+  function snapOrigin(){ if(_snapOrigin !== null) return _snapOrigin; var bcs = getComputedStyle(body), hcs = getComputedStyle(document.documentElement); var isH = /vertical|sideways/.test((bcs.writingMode||'').toLowerCase()); var bo = isH ? ((parseFloat(hcs.paddingRight)||0) + (parseFloat(bcs.marginRight)||0) + (parseFloat(bcs.paddingRight)||0)) : ((parseFloat(hcs.paddingTop)||0) + (parseFloat(bcs.marginTop)||0) + (parseFloat(bcs.paddingTop)||0)); var bL = lineSize(); if(!(bL > 0)){ _snapOrigin = bo; return bo; } var bR = body.getBoundingClientRect(); var cs = body.children; var max = Math.min(cs.length, 16); for(var i = 0; i < max; i++){ var c = cs[i]; if(!c.offsetWidth || !c.offsetHeight) continue; var ccs = getComputedStyle(c); var ls = ccs.lineHeight; var lh = parseFloat(ls); if(!(lh > 0)) continue; if(ls.indexOf('px') < 0){ var fs = parseFloat(ccs.fontSize); lh = (fs > 0) ? lh * fs : 0; } if(Math.abs(lh - bL) >= 0.5) continue; var r = c.getBoundingClientRect(); var co = isH ? (bR.right - r.right) : (r.top - bR.top); var v = bo + co; if(isFinite(v) && v >= 0){ _snapOrigin = v; return v; } break; } _snapOrigin = bo; return bo; }
+  function snapLine(p){ var ls = lineSize(); if(!(ls > 0)) return p; var o = snapOrigin(); return o + Math.floor((p - o)/ls)*ls; }
 
   function postEdge(d){ window.parent.postMessage({type:'EPUB_EDGE',direction:d},'*'); }
   function postPos(r){  window.parent.postMessage({type:'EPUB_POS', ratio:r},  '*'); }

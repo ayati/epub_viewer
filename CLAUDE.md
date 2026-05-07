@@ -53,28 +53,29 @@ When fixing a bug or adding a feature that is not in the "only" lists above, app
 
 ## Architecture
 
-Each viewer is a single self-contained HTML file (`yomikake.html` ~3618 lines, `yomikake_ios.html` ~3487 lines). Both follow a modular functional style with a single central state object. The architecture below describes `yomikake.html`; `yomikake_ios.html` is identical except for the scroll mechanism (see iOS Viewer section below).
+Each viewer is a single self-contained HTML file (`yomikake.html` ~5100 lines, `yomikake_ios.html` ~5145 lines). Both follow a modular functional style with a single central state object. The architecture below describes `yomikake.html`; `yomikake_ios.html` is identical except for the scroll mechanism (see iOS Viewer section below).
 
 **Key locations in both files** (approximate — shift as code grows):
 
 | Symbol | `yomikake.html` | `yomikake_ios.html` |
 |--------|-------------------|----------------------|
-| `GOOGLE_CLIENT_ID` | ~610 | ~593 |
-| `I18N` translations | ~627 | ~610 |
-| `state` object | ~1209 | ~1188 |
-| `FONTS` / `FONT_URLS` / `FONT_GROUPS` | ~1237 | ~1216 |
-| `loadEpub()` | ~1385 | ~1341 |
-| `navigateToToc()` | ~1514 | ~1455 |
-| `buildSrcdoc()` | ~1584 | ~1523 |
-| `buildScrollScript()` | ~1728 | ~1651 |
-| `SHARED_TAIL` (yomikake.html only) | ~1735 | — |
-| `CLICK_HANDLER` / `INIT_FN` (ios only) | — | ~1667 / ~1681 |
-| `_intraChapterRatio` | ~2022 | ~2009 |
-| `renderPage()` | ~2034 | ~2020 |
-| `handleIframeLink()` | ~2135 | ~2121 |
-| `runSearch()` / `startSearch()` | ~2463 / ~2501 | ~2446 / ~2484 |
-| `savePos()` | ~3056 | ~2933 |
-| `driveAuth()` | ~3205 | ~3082 |
+| `GOOGLE_CLIENT_ID` | ~798 | ~789 |
+| `I18N` translations | ~815 | ~806 |
+| `state` object | ~1513 | ~1536 |
+| `FONTS` / `FONT_URLS` / `FONT_GROUPS` | ~1578 / ~1607 / ~1631 | ~1595 / ~1624 / ~1647 |
+| `loadEpub()` | ~1731 | ~1901 |
+| `navigateToToc()` | ~1903 | ~2063 |
+| `buildSrcdoc()` | ~2070 | ~2225 |
+| `buildScrollScript()` | ~2214 | ~2354 |
+| `SHARED_TAIL` (yomikake.html only) | ~2221 | — |
+| `CLICK_HANDLER` / `INIT_FN` (ios only) | — | ~2370 / ~2384 |
+| `_intraChapterRatio` | ~2553 | ~2746 |
+| `renderPage()` | ~2565 | ~2757 |
+| `handleIframeLink()` | ~3446 | ~3582 |
+| `runSearch()` / `startSearch()` | ~3822 / ~3860 | ~3943 / ~3981 |
+| `loadEpubFromCache()` (ios only) | — | ~4395 |
+| `savePos()` | ~4500 | ~4554 |
+| `driveAuth()` | ~4654 | ~4708 |
 
 ### State
 
