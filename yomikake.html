@@ -267,6 +267,7 @@
   body:not(.mode-fxl) #fxl-search-notice { display:none; }
   /* FXL 時に不要な設定グループを非表示 */
   body.mode-fxl .fxl-hide-group { display:none !important; }
+  body.mode-fxl .fxl-hide-row   { display:none !important; }
   /* 非FXL時は FXL ズーム用ボタン・設定グループを非表示 */
   body:not(.mode-fxl) .fxl-only { display:none !important; }
   /* 軸モード（vfill）選択時は 2Dズーム専用の設定行（拡大倍率・LTR反転）を非表示 */
@@ -559,9 +560,9 @@
       </div>
     </div>
 
-    <div class="set-group fxl-hide-group">
+    <div class="set-group">
       <h4 data-i18n="settings.layout">レイアウト</h4>
-      <div class="set-row">
+      <div class="set-row fxl-hide-row">
         <span class="set-label" data-i18n="settings.writingMode">組方向</span>
         <select class="modern-select" id="writing-mode-select" onchange="changeWritingMode(this.value)">
           <option value="vertical" data-i18n="wm.vertical">縦書き</option>
@@ -569,7 +570,7 @@
           <option value="publisher" data-i18n="wm.publisher">ePub指定</option>
         </select>
       </div>
-      <div class="set-row">
+      <div class="set-row fxl-hide-row">
         <span class="set-label" data-i18n="settings.margin">ページ余白</span>
         <select class="modern-select" id="margin-select" onchange="changeMargin(this.value)">
           <option value="full" data-i18n="margin.full">標準</option>
@@ -589,7 +590,6 @@
     </div>
 
     <div class="set-group" id="fxl-settings-group" style="display:none">
-      <h4 data-i18n="settings.layout">レイアウト</h4>
       <div class="set-row">
         <span class="set-label" data-i18n="settings.spreadMode">見開き表示</span>
         <select class="modern-select" id="spread-mode-select" onchange="changeSpreadMode(this.value)">
