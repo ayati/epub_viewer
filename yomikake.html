@@ -1835,7 +1835,11 @@ async function loadEpub(file, fileHandle = null) {
     state.bookCreator = [...opfDoc.querySelectorAll('metadata > *|creator, metadata > creator')]
       .map(el => el.textContent.trim()).filter(Boolean).join('・');
     document.getElementById('book-title').textContent = titleText;
-    state.bookKey = 'epub_pos_' + titleText + '_' + state.spine.length;
+    state.bookKey = makeBookKey(titleText, state.bookCreator);
+    // 旧形式エントリ (epub_pos_{title}_{spineCount}) からのワンショット移行
+    if (!localStorage.getItem(state.bookKey)) {
+      migrateLegacyBookmark(titleText, state.bookCreator, state.bookKey);
+    }
 
     // 表紙サムネイル抽出（非同期、失敗しても続行）
     state.bookCoverDataUri = '';
@@ -4230,12 +4234,11 @@ function buildReadingList() {
     try {
       const val = JSON.parse(localStorage.getItem(key));
       if (!val) continue;
-      const withoutPrefix = key.slice('epub_pos_'.length);
-      const lastUnder = withoutPrefix.lastIndexOf('_');
-      if (lastUnder === -1) continue;
-      const title = withoutPrefix.slice(0, lastUnder);
-      const spineCount = parseInt(withoutPrefix.slice(lastUnder + 1), 10);
-      if (!title || isNaN(spineCount) || spineCount <= 0) continue;
+      const parsed = parseBookKey(key);
+      if (!parsed) continue;
+      const title = parsed.title;
+      const spineCount = (typeof val.spineCount === 'number' && val.spineCount > 0) ? val.spineCount : parsed.spineCount;
+      if (!title || !spineCount || spineCount <= 0) continue;
       // 完読済み除外: 最終章かつ ratio > 0.9
       if (val.spineIdx >= spineCount - 1 && (val.ratio || 0) > 0.9) continue;
       items.push({key, title, spineCount,
@@ -4317,8 +4320,12 @@ function toggleEditMode() {
 function markAsFinished(bookKey) {
   try {
     const existing = JSON.parse(localStorage.getItem(bookKey)) || {};
-    const spineCount = parseInt(bookKey.split('_').pop(), 10);
-    if (isNaN(spineCount) || spineCount <= 0) return;
+    let spineCount = (typeof existing.spineCount === 'number' && existing.spineCount > 0) ? existing.spineCount : null;
+    if (!spineCount) {
+      const p = parseBookKey(bookKey);
+      if (p && p.spineCount) spineCount = p.spineCount;
+    }
+    if (!spineCount || spineCount <= 0) return;
     localStorage.setItem(bookKey, JSON.stringify({...existing, spineIdx: spineCount - 1, ratio: 1.0}));
   } catch(e) {}
   fshDelete(bookKey).then(() => _handleKeys.delete(bookKey)).catch(() => {});
@@ -4491,6 +4498,7 @@ function saveBookMeta() {
       ...existing,
       lastOpenedAt: new Date().toISOString(),
       creator: state.bookCreator,
+      spineCount: state.spine.length,
       ...(state.bookCoverDataUri ? {cover: state.bookCoverDataUri} : {}),
     }));
   } catch(e) {}
@@ -4499,6 +4507,101 @@ function saveBookMeta() {
 // ══════════════════════════════════════════
 //  Bookmark (しおり)
 // ══════════════════════════════════════════
+// bookKey 新形式: epub_pos_{title}__{creator} (区切りは二重アンダースコア)
+// 旧形式 epub_pos_{title}_{spineCount} を読み込む後方互換あり。
+// title に __ が含まれるケースは想定しない（README/CLAUDE.md 注記）。
+function makeBookKey(title, creator) {
+  return 'epub_pos_' + (title || '') + '__' + (creator || '');
+}
+function parseBookKey(key) {
+  if (!key || !key.startsWith('epub_pos_')) return null;
+  const rest = key.slice('epub_pos_'.length);
+  const idxNew = rest.lastIndexOf('__');
+  if (idxNew !== -1) {
+    return {format: 'new', title: rest.slice(0, idxNew), creator: rest.slice(idxNew + 2), spineCount: null};
+  }
+  const idxOld = rest.lastIndexOf('_');
+  if (idxOld === -1) return null;
+  const title = rest.slice(0, idxOld);
+  const spineCount = parseInt(rest.slice(idxOld + 1), 10);
+  if (!title || isNaN(spineCount) || spineCount <= 0) return null;
+  return {format: 'old', title, creator: null, spineCount};
+}
+// 同一 (title, creator) の複数エントリを統合（最も進んだしおりを残す）。
+// 起動時に一度だけ実行し、フラグでスキップ。Import/Drive Download 後にも再実行する。
+function consolidateBookmarks() {
+  if (localStorage.getItem('epub_consolidate_v1') === '1') return;
+  const groups = new Map();
+  const allKeys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('epub_pos_')) allKeys.push(k);
+  }
+  for (const key of allKeys) {
+    let val; try { val = JSON.parse(localStorage.getItem(key)); } catch(e) { continue; }
+    if (!val) continue;
+    const parsed = parseBookKey(key);
+    if (!parsed) continue;
+    const creator = val.creator || parsed.creator || '';
+    const groupKey = JSON.stringify([parsed.title, creator]);
+    if (!groups.has(groupKey)) groups.set(groupKey, []);
+    groups.get(groupKey).push({key, val, parsed});
+  }
+  for (const [gKey, entries] of groups) {
+    if (entries.length < 2) continue;
+    const [title, creator] = JSON.parse(gKey);
+    entries.sort((a, b) => {
+      const pa = (a.val.spineIdx || 0) + (a.val.ratio || 0);
+      const pb = (b.val.spineIdx || 0) + (b.val.ratio || 0);
+      if (pa !== pb) return pb - pa;
+      const ta = a.val.lastOpenedAt ? new Date(a.val.lastOpenedAt).getTime() : 0;
+      const tb = b.val.lastOpenedAt ? new Date(b.val.lastOpenedAt).getTime() : 0;
+      return tb - ta;
+    });
+    const winner = entries[0];
+    const newKey = makeBookKey(title, creator);
+    const newVal = {...winner.val};
+    if (typeof newVal.spineCount !== 'number' && winner.parsed.spineCount) newVal.spineCount = winner.parsed.spineCount;
+    if (!newVal.creator) newVal.creator = creator;
+    try { localStorage.setItem(newKey, JSON.stringify(newVal)); } catch(e) { continue; }
+    let oldLbKey = '';
+    try { const lb = JSON.parse(localStorage.getItem('epub_last_book')); if (lb && lb.bookKey) oldLbKey = lb.bookKey; } catch(e) {}
+    let lbHit = false;
+    for (const ent of entries) {
+      if (ent.key !== newKey) { try { localStorage.removeItem(ent.key); } catch(e) {} if (ent.key === oldLbKey) lbHit = true; }
+    }
+    if (lbHit) { try { localStorage.setItem('epub_last_book', JSON.stringify({title, bookKey: newKey})); } catch(e) {} }
+  }
+  try { localStorage.setItem('epub_consolidate_v1', '1'); } catch(e) {}
+}
+// 開いた本に対応する旧形式エントリを新キーへ移行。creator 一致のもののうち最新を採用。
+function migrateLegacyBookmark(title, creator, newKey) {
+  let bestKey = null, bestVal = null, bestTime = -1;
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key || !key.startsWith('epub_pos_') || key === newKey) continue;
+    const parsed = parseBookKey(key);
+    if (!parsed || parsed.title !== title) continue;
+    let val; try { val = JSON.parse(localStorage.getItem(key)); } catch(e) { continue; }
+    if (!val) continue;
+    if ((val.creator || '') !== (creator || '')) continue;
+    const ts = val.lastOpenedAt ? new Date(val.lastOpenedAt).getTime() : 0;
+    if (ts > bestTime) { bestKey = key; bestVal = val; bestTime = ts; }
+  }
+  if (!bestVal) return null;
+  const migrated = {...bestVal};
+  if (typeof migrated.spineCount !== 'number') {
+    const p = parseBookKey(bestKey);
+    if (p && p.spineCount) migrated.spineCount = p.spineCount;
+  }
+  try { localStorage.setItem(newKey, JSON.stringify(migrated)); } catch(e) { return null; }
+  try { localStorage.removeItem(bestKey); } catch(e) {}
+  try {
+    const lb = JSON.parse(localStorage.getItem('epub_last_book'));
+    if (lb && lb.bookKey === bestKey) localStorage.setItem('epub_last_book', JSON.stringify({title, bookKey: newKey}));
+  } catch(e) {}
+  return migrated;
+}
 function loadSavedPos() {
   if (!state.bookKey) return null;
   try { return JSON.parse(localStorage.getItem(state.bookKey)); } catch(e) { return null; }
@@ -4619,9 +4722,16 @@ document.getElementById('bookmark-input').addEventListener('change', e => {
           if (key.startsWith('epub_pos_')) count++;
         } catch(e) { notifyStorageError(); break; }
       }
+      // 旧形式キーが取り込まれた場合に備え再統合（state.bookKey は新形式なので統合後にヒットする）
+      try { localStorage.removeItem('epub_consolidate_v1'); } catch(e) {}
+      consolidateBookmarks();
       let jumped = false;
       if (state.epub && state.bookKey) {
-        const newVal = json.bookmarks[state.bookKey];
+        let newVal = json.bookmarks[state.bookKey];
+        if (newVal == null) {
+          // インポート JSON が旧形式キーで来た場合、統合後の新キーから読み直す
+          try { newVal = JSON.parse(localStorage.getItem(state.bookKey)); } catch(e) {}
+        }
         if (newVal != null) {
           let newSaved;
           try { newSaved = typeof newVal === 'string' ? JSON.parse(newVal) : newVal; } catch(e) {}
@@ -4903,9 +5013,15 @@ async function driveDownload() {
         if (key.startsWith('epub_pos_')) count++;
       } catch(e) { notifyStorageError(); break; }
     }
+    // Drive 上の旧形式キーが取り込まれた場合に備え再統合
+    try { localStorage.removeItem('epub_consolidate_v1'); } catch(e) {}
+    consolidateBookmarks();
     let jumped = false;
     if (state.epub && state.bookKey) {
-      const newVal = json.bookmarks[state.bookKey];
+      let newVal = json.bookmarks[state.bookKey];
+      if (newVal == null) {
+        try { newVal = JSON.parse(localStorage.getItem(state.bookKey)); } catch(e) {}
+      }
       if (newVal != null) {
         let newSaved;
         try { newSaved = typeof newVal === 'string' ? JSON.parse(newVal) : newVal; } catch(e) {}
@@ -5085,6 +5201,7 @@ initLang();
 applyI18n();
 document.getElementById('toc-btn').classList.add('active');
 loadSettings();
+consolidateBookmarks();
 updateFxlLtrAutoFlipUI();
 showResumeBanner();
 updateThemeBtnUI();
